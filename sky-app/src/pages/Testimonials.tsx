@@ -1,72 +1,38 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
-import { Star, Quote, Plus, Building2, User } from "lucide-react";
+import { Star, Quote, Plus, Building2, User, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { toast } from "sonner";
 import PartnershipDialog from "@/components/PartnershipDialog";
+import { supabase } from "@/lib/Supabaseclient";
 
-const testimonials = [
-  {
-    id: 1,
-    name: "Sarah Mitchell",
-    location: "New York, USA",
-    rating: 5,
-    text: "SkyGuide helped me find the perfect sunny destination for my winter getaway! The weather filters are incredibly accurate and the recommendations were spot on.",
-    avatar: "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&q=80",
-    type: "customer",
-  },
-  {
-    id: 2,
-    name: "James Liu",
-    location: "London, UK",
-    rating: 5,
-    text: "As an avid hiker, finding destinations with the right weather conditions is crucial. SkyGuide made this so easy! Found my dream hiking spot in the Swiss Alps.",
-    avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&q=80",
-    type: "customer",
-  },
-  {
-    id: 3,
-    name: "Maria Garcia",
-    location: "Barcelona, Spain",
-    rating: 5,
-    text: "Amazing tool for planning family vacations. The kids loved every destination we picked using SkyGuide. Will definitely use it again!",
-    avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=100&q=80",
-    type: "customer",
-  },
-  {
-    id: 4,
-    name: "TravelMax Agency",
-    location: "Toronto, Canada",
-    rating: 5,
-    text: "We've integrated SkyGuide into our booking platform and our customers love it. The B2B API is robust and well-documented.",
-    avatar: "https://images.unsplash.com/photo-1560179707-f14e90ef3623?w=100&q=80",
-    type: "client",
-  },
-  {
-    id: 5,
-    name: "Adventure Tours Co.",
-    location: "Sydney, Australia",
-    rating: 5,
-    text: "SkyGuide has transformed how we plan adventure tours. Weather accuracy is crucial for our outdoor activities and SkyGuide delivers every time.",
-    avatar: "https://images.unsplash.com/photo-1486406146926-c627a92ad1ab?w=100&q=80",
-    type: "client",
-  },
-  {
-    id: 6,
-    name: "Priya Sharma",
-    location: "Mumbai, India",
-    rating: 4,
-    text: "Great platform for discovering new travel destinations. The temperature filter helped me find comfortable spots during the summer heat.",
-    avatar: "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=100&q=80",
-    type: "customer",
-  },
-];
+interface Review {
+  id: string;
+  author_name: string;
+  location: string | null;
+  reviewer_type: "customer" | "client";
+  rating: number;
+  message: string;
+  created_at: string;
+}
+
+// No avatar uploads yet, so we render initials instead of a photo.
+const initials = (name: string) =>
+  name
+    .split(" ")
+    .map((word) => word[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
 
 const Testimonials = () => {
+  const [reviews, setReviews] = useState<Review[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const [filter, setFilter] = useState<"all" | "customer" | "client">("all");
   const [showForm, setShowForm] = useState(false);
   const [showPartnershipDialog, setShowPartnershipDialog] = useState(false);
@@ -78,20 +44,64 @@ const Testimonials = () => {
     type: "customer" as "customer" | "client",
   });
 
-  const handleReviewSubmit = (e: React.FormEvent) => {
+  useEffect(() => {
+    fetchReviews();
+  }, []);
+
+  const fetchReviews = async () => {
+    setIsLoading(true);
+    const { data, error } = await supabase
+      .from("reviews")
+      .select("*")
+      .order("created_at", { ascending: false });
+
+    if (error) {
+      toast.error("Couldn't load reviews. Please try again.");
+      console.error(error);
+    } else {
+      setReviews(data ?? []);
+    }
+    setIsLoading(false);
+  };
+
+  const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!reviewForm.name || !reviewForm.review) {
       toast.error("Please fill in all required fields");
       return;
     }
+
+    setIsSubmitting(true);
+    const { data, error } = await supabase
+      .from("reviews")
+      .insert({
+        author_name: reviewForm.name,
+        location: reviewForm.location || null,
+        reviewer_type: reviewForm.type,
+        rating: reviewForm.rating,
+        message: reviewForm.review,
+      })
+      .select()
+      .single();
+
+    setIsSubmitting(false);
+
+    if (error) {
+      toast.error("Couldn't submit your review. Please try again.");
+      console.error(error);
+      return;
+    }
+
+    // Prepend the new review immediately instead of refetching everything.
+    setReviews((prev) => [data as Review, ...prev]);
     toast.success("Thank you for your review!");
     setReviewForm({ name: "", location: "", review: "", rating: 5, type: "customer" });
     setShowForm(false);
   };
 
-  const filteredTestimonials = testimonials.filter((t) => {
+  const filteredTestimonials = reviews.filter((t) => {
     if (filter === "all") return true;
-    return t.type === filter;
+    return t.reviewer_type === filter;
   });
 
   return (
@@ -236,7 +246,10 @@ const Testimonials = () => {
                 />
               </div>
 
-              <Button variant="hero" type="submit" className="w-full">
+              <Button variant="hero" type="submit" className="w-full" disabled={isSubmitting}>
+                {isSubmitting ? (
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                ) : null}
                 Submit Review
               </Button>
             </form>
@@ -244,41 +257,51 @@ const Testimonials = () => {
         )}
 
         {/* Testimonials Grid */}
-        <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
-          {filteredTestimonials.map((testimonial, index) => (
-            <div
-              key={testimonial.id}
-              className="glass-card p-6 animate-fade-in"
-              style={{ animationDelay: `${index * 100}ms` }}
-            >
-              <Quote className="w-8 h-8 text-primary/30 mb-4" />
-              <p className="text-foreground mb-4 leading-relaxed">
-                "{testimonial.text}"
-              </p>
-              <div className="flex items-center gap-3">
-                <img
-                  src={testimonial.avatar}
-                  alt={testimonial.name}
-                  className="w-12 h-12 rounded-full object-cover"
-                />
-                <div>
-                  <h4 className="font-semibold text-foreground flex items-center gap-2">
-                    {testimonial.name}
-                    {testimonial.type === "client" && (
-                      <Building2 className="w-4 h-4 text-primary" />
+        {isLoading ? (
+          <div className="flex justify-center py-16">
+            <Loader2 className="w-8 h-8 animate-spin text-primary" />
+          </div>
+        ) : filteredTestimonials.length === 0 ? (
+          <p className="text-center text-muted-foreground mb-16">
+            No reviews yet — be the first to share your experience!
+          </p>
+        ) : (
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-6 mb-16">
+            {filteredTestimonials.map((testimonial, index) => (
+              <div
+                key={testimonial.id}
+                className="glass-card p-6 animate-fade-in"
+                style={{ animationDelay: `${index * 100}ms` }}
+              >
+                <Quote className="w-8 h-8 text-primary/30 mb-4" />
+                <p className="text-foreground mb-4 leading-relaxed">
+                  "{testimonial.message}"
+                </p>
+                <div className="flex items-center gap-3">
+                  <div className="w-12 h-12 rounded-full bg-primary/20 text-primary font-semibold flex items-center justify-center">
+                    {initials(testimonial.author_name)}
+                  </div>
+                  <div>
+                    <h4 className="font-semibold text-foreground flex items-center gap-2">
+                      {testimonial.author_name}
+                      {testimonial.reviewer_type === "client" && (
+                        <Building2 className="w-4 h-4 text-primary" />
+                      )}
+                    </h4>
+                    {testimonial.location && (
+                      <p className="text-sm text-muted-foreground">{testimonial.location}</p>
                     )}
-                  </h4>
-                  <p className="text-sm text-muted-foreground">{testimonial.location}</p>
+                  </div>
+                </div>
+                <div className="flex gap-1 mt-3">
+                  {Array.from({ length: testimonial.rating }).map((_, i) => (
+                    <Star key={i} className="w-4 h-4 fill-primary text-primary" />
+                  ))}
                 </div>
               </div>
-              <div className="flex gap-1 mt-3">
-                {Array.from({ length: testimonial.rating }).map((_, i) => (
-                  <Star key={i} className="w-4 h-4 fill-primary text-primary" />
-                ))}
-              </div>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
 
         {/* Become a Client CTA */}
         <div className="navy-card text-center max-w-2xl mx-auto">
