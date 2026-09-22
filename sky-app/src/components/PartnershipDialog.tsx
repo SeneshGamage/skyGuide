@@ -16,7 +16,9 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Loader2 } from "lucide-react";
 import { toast } from "sonner";
+import { supabase } from "@/lib/Supabaseclient";
 
 interface PartnershipDialogProps {
   open: boolean;
@@ -49,14 +51,33 @@ const PartnershipDialog = ({ open, onOpenChange }: PartnershipDialogProps) => {
     companySize: "",
     message: "",
   });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     // Validate required fields
     if (!formData.name || !formData.email || !formData.companyName || !formData.industry || !formData.companySize) {
       toast.error("Please fill in all required fields");
       return;
     }
+
+    setIsSubmitting(true);
+    const { error } = await supabase.from("partnership_leads").insert({
+      contact_name: formData.name,
+      email: formData.email,
+      company_name: formData.companyName,
+      industry: formData.industry,
+      company_size: formData.companySize,
+      message: formData.message || null,
+    });
+    setIsSubmitting(false);
+
+    if (error) {
+      toast.error("Couldn't submit your request. Please try again.");
+      console.error(error);
+      return;
+    }
+
     toast.success("Partnership request submitted! We'll be in touch soon.");
     setFormData({
       name: "",
@@ -184,7 +205,8 @@ const PartnershipDialog = ({ open, onOpenChange }: PartnershipDialogProps) => {
             />
           </div>
 
-          <Button type="submit" variant="hero" className="w-full">
+          <Button type="submit" variant="hero" className="w-full" disabled={isSubmitting}>
+            {isSubmitting ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
             Submit Inquiry
           </Button>
         </form>
