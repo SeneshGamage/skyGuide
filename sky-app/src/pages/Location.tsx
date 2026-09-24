@@ -1,12 +1,37 @@
+import { useEffect, useState } from "react";
 import { useParams, Link } from "react-router-dom";
 import { Layout } from "@/components/layout/Layout";
 import { Button } from "@/components/ui/button";
-import { destinations } from "@/data/destinations";
-import { MapPin, Star, Thermometer, Droplets, Wind, ExternalLink, Navigation } from "lucide-react";
+import { fetchDestinationBySlug, Destination } from "@/lib/destinationsApi";
+import { MapPin, Star, Thermometer, Droplets, Wind, ExternalLink, Navigation, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 const Location = () => {
   const { id } = useParams<{ id: string }>();
-  const destination = destinations.find((d) => d.id === id);
+  const [destination, setDestination] = useState<Destination | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    if (!id) return;
+    setIsLoading(true);
+    fetchDestinationBySlug(id)
+      .then(setDestination)
+      .catch((error) => {
+        console.error(error);
+        toast.error("Couldn't load this destination. Please try again.");
+      })
+      .finally(() => setIsLoading(false));
+  }, [id]);
+
+  if (isLoading) {
+    return (
+      <Layout>
+        <div className="flex justify-center py-32">
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
+        </div>
+      </Layout>
+    );
+  }
 
   if (!destination) {
     return (
