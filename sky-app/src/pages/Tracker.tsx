@@ -1,9 +1,10 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Layout } from "@/components/layout/Layout";
 import { WeatherFilters } from "@/components/tracker/WeatherFilters";
 import { LocationCard } from "@/components/tracker/LocationCard";
-import { destinations } from "@/data/destinations";
-import { Search } from "lucide-react";
+import { fetchDestinations, Destination } from "@/lib/destinationsApi";
+import { Search, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 
 interface FiltersState {
   date: string;
@@ -15,6 +16,8 @@ interface FiltersState {
 }
 
 const Tracker = () => {
+  const [destinations, setDestinations] = useState<Destination[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [filters, setFilters] = useState<FiltersState>({
     date: "",
@@ -24,6 +27,16 @@ const Tracker = () => {
     mist: false,
     rain: false,
   });
+
+  useEffect(() => {
+    fetchDestinations()
+      .then(setDestinations)
+      .catch((error) => {
+        console.error(error);
+        toast.error("Couldn't load destinations. Please try again.");
+      })
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const filteredDestinations = useMemo(() => {
     return destinations
@@ -55,7 +68,7 @@ const Tracker = () => {
         return true;
       })
       .sort((a, b) => b.rating - a.rating);
-  }, [searchQuery, filters]);
+  }, [destinations, searchQuery, filters]);
 
   return (
     <Layout>
@@ -93,30 +106,38 @@ const Tracker = () => {
               </div>
             </div>
 
-            {/* Results Count */}
-            <p className="text-sm text-muted-foreground mb-4">
-              {filteredDestinations.length} destinations found
-            </p>
-
-            {/* Results Grid */}
-            <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">
-              {filteredDestinations.map((destination, index) => (
-                <div
-                  key={destination.id}
-                  className="animate-fade-in"
-                  style={{ animationDelay: `${index * 50}ms` }}
-                >
-                  <LocationCard {...destination} />
-                </div>
-              ))}
-            </div>
-
-            {filteredDestinations.length === 0 && (
-              <div className="text-center py-16 glass-card">
-                <p className="text-muted-foreground text-lg">
-                  No destinations match your criteria. Try adjusting the filters.
-                </p>
+            {isLoading ? (
+              <div className="flex justify-center py-16">
+                <Loader2 className="w-8 h-8 animate-spin text-primary" />
               </div>
+            ) : (
+              <>
+                {/* Results Count */}
+                <p className="text-sm text-muted-foreground mb-4">
+                  {filteredDestinations.length} destinations found
+                </p>
+
+                {/* Results Grid */}
+                <div className="grid sm:grid-cols-2 xl:grid-cols-3 gap-6">
+                  {filteredDestinations.map((destination, index) => (
+                    <div
+                      key={destination.id}
+                      className="animate-fade-in"
+                      style={{ animationDelay: `${index * 50}ms` }}
+                    >
+                      <LocationCard {...destination} />
+                    </div>
+                  ))}
+                </div>
+
+                {filteredDestinations.length === 0 && (
+                  <div className="text-center py-16 glass-card">
+                    <p className="text-muted-foreground text-lg">
+                      No destinations match your criteria. Try adjusting the filters.
+                    </p>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>
