@@ -1,4 +1,5 @@
-import { supabase } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/Supabaseclient";
+import { fetchLiveWeather } from "@/lib/weatherApi";
 
 // Same shape as the old src/data/destinations.ts, so LocationCard.tsx and
 // Location.tsx don't need to change - only where the data comes from changes.
@@ -44,6 +45,23 @@ function mapRow(row: DestinationRow): Destination {
   };
 }
 
+// Overlays live Open-Meteo data onto a destination's stored fallback values.
+// If the weather call fails (rate limit, network blip), the destination is
+// simply returned unchanged with its last-known DB values - the page never
+// breaks because of a weather API hiccup.
+async function withLiveWeather(destination: Destination): Promise<Destination> {
+  try {
+    const live = await fetchLiveWeather(
+      destination.coordinates.lat,
+      destination.coordinates.lng
+    );
+    return { ...destination, ...live };
+  } catch (error) {
+    console.warn(`Live weather unavailable for ${destination.name}, using stored values`, error);
+    return destination;
+  }
+}
+
 export async function fetchDestinations(): Promise<Destination[]> {
   const { data, error } = await supabase
     .from("destinations")
@@ -51,7 +69,12 @@ export async function fetchDestinations(): Promise<Destination[]> {
     .order("rating", { ascending: false });
 
   if (error) throw error;
-  return (data as DestinationRow[]).map(mapRow);
+  const destinations = (data as DestinationRow[]).map(mapRow);
+
+  // Fetch live weather for all destinations in parallel rather than one
+  // at a time - 8 destinations means 8 concurrent requests, well within
+  // Open-Meteo's free limits.
+  return Promise.all(destinations.map(withLiveWeather));
 }
 
 export async function fetchDestinationBySlug(slug: string): Promise<Destination | null> {
@@ -62,5 +85,7 @@ export async function fetchDestinationBySlug(slug: string): Promise<Destination 
     .maybeSingle();
 
   if (error) throw error;
-  return data ? mapRow(data as DestinationRow) : null;
+  if (!data) return null;
+
+  return withLiveWeather(mapRow(data as DestinationRow));
 }
